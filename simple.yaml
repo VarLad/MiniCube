@@ -1,0 +1,126 @@
+hosts:
+    h1:
+        type: docker
+        description: "Example host 1"
+        groups:
+            - hosts
+        interfaces:
+            eth0:
+                description: "Example connection to sw1"
+                speed: 1000
+                addresses:
+                    - "192.168.0.1/24"
+                    - "fe80::1/64"
+                dns: 1.1.1.1
+                gateway: 192.168.0.255
+                dst_node: sw1
+                dst_iface: 1
+                vlans:
+                    eth0.100:
+                        description: "Example VLAN 100"
+                        addresses:
+                            - "10.0.0.1/24"
+                            - "2001:db8:1::1/64"
+                        id: 100
+        cmds: # Additional commands to run when starting host
+            - cmd: "...."
+            - cmd: "...."
+    h2:
+        type: docker
+        description: "Example host 2"
+        groups:
+            - hosts
+        interfaces:
+            eth0:
+                description: "Example connection to sw1"
+                speed: 1000
+                addresses:
+                    - "192.168.0.2/24"
+                    - "fe80::2/64"
+                dst_node: sw2
+                dst_iface: 2
+                vlans:
+                    eth0.100:
+                        description: "Example VLAN 100"
+                        addresses:
+                            - "10.0.0.2/24"
+                            - "2001:db8:1::2/64"
+                        id: 100
+
+connections:
+    c1:
+        - "h1"
+        - "h2"
+
+vlans:
+    test:
+        description: "Example VLAN"
+        id: 1000
+
+switches:
+    sw1:
+        type: ovs
+        description: "Example basic Open vSwitch"
+    sw2:
+        type: ovs
+        description: "Example basic Open vSwitch"
+        interfaces:
+            eth10:
+                description: "Example connection to sw1"
+                speed: 1000
+                dst_node: sw1
+                dst_iface: eth10
+
+tests:
+    - name: "Test reachability between hosts"
+      ref_name: "reach_all"
+      reachability:
+          groups:
+              - hosts
+          ipv4: True
+          ipv6: True
+          subnet_aware: False
+          vlan_aware: True
+          deadline: 1
+      verify:
+          - name: "No packets lost"
+            reachability:
+                packets_lost: 0
+                max_unreachable: 0
+                percent_loss: 0
+    - name: "Link up and down test"
+      actions:
+          - name: "Pinging all the hosts"
+            reachability:
+                groups:
+                    - hosts
+                ipv4: True
+                ipv6: True
+                deadline: 1
+          - name: "Set the link between sw1 and sw2 down"
+            link_down:
+                links:
+                    - [sw1, sw2]
+          - name: "Pinging all the hosts"
+            reachability:
+                groups:
+                    - hosts
+                ipv4: True
+                ipv6: True
+                deadline: 1
+          - name: "Set the link between sw1 and sw2 up"
+            link_up:
+                links:
+                    - [sw1, sw2]
+          - name: "Pinging all the hosts"
+            reachability:
+                groups:
+                    - hosts
+                ipv4: True
+                ipv6: True
+                deadline: 1
+      verify:
+          - name: "Verify packets lost in redundancy"
+            reachability:
+                percent_loss: 0
+
