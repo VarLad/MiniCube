@@ -9,6 +9,5 @@ type Node struct {
 	Disk            int
 	DiskAllocated   int
 	Role            string
-	TackCount       int
+	TaskCount       int
 }
-

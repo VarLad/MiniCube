@@ -22,7 +22,7 @@ type Interface struct {
 	DNS         string          `yaml:"dns,omitempty"`
 	Gateway     string          `yaml:"gateway,omitempty"`
 	DstNode     string          `yaml:"dst_node,omitempty"`
-	DstIface    interface{}     `yaml:"dst_iface,omitempty"` // Can be string or int
+	DstIface    string          `yaml:"dst_iface,omitempty"` // Can be string or int
 	VLANs       map[string]VLAN `yaml:"vlans,omitempty"`
 }
 
@@ -218,11 +218,18 @@ func (nc *NetworkConfig) GetHostsInGroup(groupName string) []string {
 	return hosts
 }
 
-func ConnectNetworkconfig(conf *NetworkConfig) () {
-	for _, connections := range conf.Connections {
-		for _, element := range connections {
-			fmt.Println(conf.Hosts[element].Type)
-		}
+func ConnectNetworkconfig(conf *NetworkConfig) {
+	// fmt.Println(conf.Hosts["h3"])
+	for _, host := range conf.Hosts {
+		fmt.Println(host.Commands)
 	}
-}                                                                                                                                      
-
+	/*
+		for _, connections := range conf.Connections {
+			for _, element := range connections {
+				fmt.Println(element)
+				fmt.Println(conf.Hosts[element])
+				fmt.Println(conf.Hosts[element].Type)
+			}
+		}
+	*/
+}

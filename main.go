@@ -1,26 +1,38 @@
 // %%
 package main
 
-// %%
 import (
 	"OrchestratorGo/cube/node"
-	"OrchestratorGo/cube/parser"
 	"OrchestratorGo/cube/task"
 	"fmt"
+	"os"
+	"os/exec"
 	"time"
 
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
 
 	"OrchestratorGo/cube/manager"
+	"OrchestratorGo/cube/parser"
 	"OrchestratorGo/cube/worker"
+
 	"github.com/moby/moby/client"
+	// "github.com/vishvananda/netlink"
+	// "github.com/vishvananda/netns"
 )
+
+/*
+func createConnections() {
+	ns1 := uuid.NewString()
+	ns2 := uuid.NewString()
+
+}
+*/
 
 func createContainer() (*task.Docker, *task.DockerResult) {
 	c := task.Config{
 		Name:  "test-container-1",
-		Image: "postgres:13",
+		Image: "alpine:latest",
 		Env: []string{
 			"POSTGRES_USER=cube",
 			"POSTGRES_PASSWORD=secret",
@@ -33,19 +45,64 @@ func createContainer() (*task.Docker, *task.DockerResult) {
 		Config: c,
 	}
 
-	result := d.Run()
+	result := d.Run([]string{"true"})
 	if result.Error != nil {
 		fmt.Printf("%v\n", result.Error)
 		return nil, nil
 	}
 
-	fmt.Printf(
-		"Container %s is running with config %v\n", result.ContainerId, c)
+	fmt.Printf("Container %s is running with config %v\n", result.ContainerId, c)
 	return &d, &result
 }
 
+func createContainersFromConfig(conf *parser.NetworkConfig) ([]*task.Docker, []*task.DockerResult, []string) {
+	ds := []*task.Docker{}
+	results := []*task.DockerResult{}
+	hostnames := []string{}
+
+	for hostname, host := range conf.Hosts {
+		if host.Type == "docker" {
+
+			c := task.Config{
+				Name:  string(hostname),
+				Image: "alpine:latest",
+				Env: []string{
+					"HELLO=cube",
+				},
+			}
+
+			dc, _ := client.NewClientWithOpts(client.FromEnv)
+			d := task.Docker{
+				Client: dc,
+				Config: c,
+			}
+
+			result := d.Run([]string{"sleep", "infinity"})
+			if result.Error != nil {
+				fmt.Printf("%v\n", result.Error)
+				return nil, nil, nil
+			}
+			fmt.Printf("Container %s is running with config %v\n", result.ContainerId, c)
+			ds = append(ds, &d)
+			results = append(results, &result)
+			hostnames = append(hostnames, d.Config.Name)
+		}
+	}
+
+	return ds, results, hostnames
+}
+
+func createConnectionsFromNetworkConfig(conf *parser.NetworkConfig, createResults []*task.Docker, dockerResults []*task.DockerResult, hostnames []string) {
+	for i := range hostnames {
+		fmt.Println(hostnames[i])
+		fmt.Println(conf.Hosts[hostnames[i]])
+		fmt.Println(createResults[i].Config.Name)
+		fmt.Println(dockerResults[i].Netnsid)
+	}
+}
+
 func stopContainer(d *task.Docker, id string) *task.DockerResult {
-	result := d.Docker.Stop(id)
+	result := d.Stop(id)
 	if result.Error != nil {
 		fmt.Printf("%v\n", result.Error)
 		return nil
@@ -56,9 +113,8 @@ func stopContainer(d *task.Docker, id string) *task.DockerResult {
 	return &result
 }
 
-// %%
 func main() {
-	fmt.Println("=== Parsing YAML file ===")
+	fmt.Println("==== Parsing YAML file ====")
 	config, _ := parser.ParseYAMLFile("simple.yaml")
 	parser.ConnectNetworkconfig(config)
 
@@ -116,13 +172,38 @@ func main() {
 	fmt.Printf("node: %v\n", n)
 
 	fmt.Printf("create a test container\n")
-	dockerTask, createResult := createContainer()
-	if createResult.Error != nil {
-		fmt.Printf("%v", createResult.Error)
-		os.Exit(1)
-	}
+	/*
+		dockerTask, createResult := createContainer()
+		if createResult.Error != nil {
+			fmt.Printf("%v", createResult.Error)
+			os.Exit(1)
+		}
 
-	time.Sleep(time.Second * 5)
-	fmt.Printf("stopping container %s\n", createResult.ContainerId)
-	_ = stop_container(dockerTask, createResult.ContainerId)
+		time.Sleep(time.Second * 5)
+
+		fmt.Printf("stopping container %s\n", createResult.ContainerId)
+		_ = stopContainer(dockerTask, createResult.ContainerId)
+	*/
+
+	dockerTasks, createResults, hostnames := createContainersFromConfig(config)
+	// connections := createConnectionsFromNetwork(config)
+	createConnectionsFromNetworkConfig(config, dockerTasks, createResults, hostnames)
+
+	var i string
+
+	fmt.Scanln(&i)
+
+	for i := range dockerTasks {
+		createResult := createResults[i]
+		dockerTask := dockerTasks[i]
+
+		if createResult.Error != nil {
+			fmt.Printf("%v", createResult.Error)
+			os.Exit(1)
+		}
+
+		fmt.Printf("stopping container %s\n", createResult.ContainerId)
+		_ = stopContainer(dockerTask, createResult.ContainerId)
+		exec.Command("sudo", "ip", "netns", "del", createResult.Netnsid)
+	}
 }

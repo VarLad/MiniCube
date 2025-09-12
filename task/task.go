@@ -1,30 +1,31 @@
 package task
 
-// %%
 import (
 	"context"
-	"github.com/docker/docker/pkg/stdcopy"
-	//	"github.com/moby/moby/api/types"
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/image"
-	"github.com/moby/moby/client"
-
-	//	"github.com/boltdb/bolt"
-	"io"
-	"log"
-	"os"
-	"time"
+	"os/exec"
 
 	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
+	"github.com/moby/moby/api/types/container"
+
+	//	"github.com/moby/moby/api/types/image"
+	"github.com/moby/moby/client"
+	//	"github.com/moby/moby/pkg/stdcopy"
+	"io"
+	// "github.com/moby/moby/api/types/container"
+	// "github.com/moby/moby/api/types/image"
+	// "github.com/moby/moby/client"
+	"log"
+	"math"
+	"os"
+	"time"
+
+	"github.com/docker/docker/pkg/stdcopy"
+	// "github.com/vishvananda/netlink"
+	// "github.com/vishvananda/netns"
+	"strconv"
 )
 
-// %% [markdown]
-// ## Defining the State
-// This defines the State a Task can be in.
-// It can be one of, Pending, Scheduled, Running, Completed, Failed
-
-// %%
 type State int
 
 const (
@@ -35,33 +36,6 @@ const (
 	Failed
 )
 
-// %%
-var stateTransitionMap = map[State][]State{
-	Pending:   []State{Scheduled},
-	Scheduled: []State{Scheduled, Running, Failed},
-	Running:   []State{Running, Completed, Failed},
-	Completed: []State{},
-	Failed:    []State{},
-}
-
-func Contains(states []State, state State) bool {
-	for _, s := range states {
-		if s == state {
-			return true
-		}
-	}
-	return false
-}
-
-func ValidStateTransition(src State, dst State) bool {
-	return Contains(stateTransitionMap[src], dst)
-}
-
-// %% [markdown]
-// ## Defining a task
-// A task is a
-
-// %%
 type Task struct {
 	ID            uuid.UUID
 	ContainerID   string
@@ -78,16 +52,6 @@ type Task struct {
 	FinishTime    time.Time
 }
 
-// %% [markdown]
-// ## Defining a TaskEvent
-// A TaskEvent is useful when we want to stop a task.
-// It has the following information:
-// - An ID,
-// - A State that the Task should transition to
-// - Timestamp to record when the event was requested
-// - Task:
-
-// %%
 type TaskEvent struct {
 	ID        uuid.UUID
 	State     State
@@ -95,10 +59,6 @@ type TaskEvent struct {
 	Task      Task
 }
 
-// %% [markdown]
-// Task Config
-
-// %%
 type Config struct {
 	Name          string
 	AttachStdin   bool
@@ -112,45 +72,31 @@ type Config struct {
 	Disk          int64
 	Env           []string
 	RestartPolicy string
-	Runtime       Task
 }
 
 type Docker struct {
-	Client      *client.Client
-	Config      Config
-	ContainerId string
+	Client *client.Client
+	Config Config
 }
 
 type DockerResult struct {
+	Netnsid     string
+	Pid         int
 	Error       error
 	Action      string
 	ContainerId string
 	Result      string
 }
 
-func NewConfig(t *Task) *Config {
-	return &Config{
-		Name:          t.Name,
-		Image:         t.Image,
-		RestartPolicy: t.RestartPolicy,
-	}
-}
-
-func NewDocker(c *Config) *Docker {
-	dc, _ := client.NewClientWithOpts(client.FromEnv)
-	return &Docker{
-		Client: dc,
-		Config: *c,
-	}
-}
-
-func (d *Docker) Run() DockerResult {
+func (d *Docker) Run(cmd []string) DockerResult {
 	ctx := context.Background()
-	reader, err := d.Client.ImagePull(ctx, d.Config.Image, image.PullOptions{})
+	reader, err := d.Client.ImagePull(
+		ctx, d.Config.Image, client.ImagePullOptions{})
 	if err != nil {
 		log.Printf("Error pulling image %s: %v\n", d.Config.Image, err)
 		return DockerResult{Error: err}
 	}
+
 	io.Copy(os.Stdout, reader)
 
 	rp := container.RestartPolicy{
@@ -158,47 +104,73 @@ func (d *Docker) Run() DockerResult {
 	}
 
 	r := container.Resources{
-		Memory: d.Config.Memory,
+		Memory:   d.Config.Memory,
+		NanoCPUs: int64(d.Config.Cpu * math.Pow(10, 9)),
 	}
 
 	cc := container.Config{
-		Image: d.Config.Image,
-		Env:   d.Config.Env,
+		Image:        d.Config.Image,
+		Tty:          false,
+		Env:          d.Config.Env,
+		ExposedPorts: d.Config.ExposedPorts,
+		Cmd:          cmd,
 	}
 
 	hc := container.HostConfig{
 		RestartPolicy:   rp,
 		Resources:       r,
 		PublishAllPorts: true,
+		NetworkMode:     "none",
 	}
 
 	resp, err := d.Client.ContainerCreate(ctx, &cc, &hc, nil, nil, d.Config.Name)
 	if err != nil {
-		log.Printf("Error creating container user image %s: %v\n", d.Config.Image, err)
+		log.Printf("Error creating container using image %s: %v\n", d.Config.Image, err)
 		return DockerResult{Error: err}
 	}
 
-	err = d.Client.ContainerStart(ctx, resp.ID, container.StartOptions{})
+	err = d.Client.ContainerStart(ctx, resp.ID, client.ContainerStartOptions{})
+
 	if err != nil {
 		log.Printf("Error starting container %s: %v\n", resp.ID, err)
 		return DockerResult{Error: err}
 	}
 
-	out, err := d.Client.ContainerLogs(
-		ctx,
-		resp.ID,
-		container.LogsOptions{ShowStdout: true, ShowStderr: true},
-	)
+	// d.Config.Runtime.ContainerID = resp.ID
+
+	out, err := d.Client.ContainerLogs(ctx, resp.ID, client.ContainerLogsOptions{ShowStdout: true, ShowStderr: true})
 	if err != nil {
 		log.Printf("Error getting logs for container %s: %v\n", resp.ID, err)
 		return DockerResult{Error: err}
 	}
 
 	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
+	cinfo, _ := d.Client.ContainerInspect(ctx, resp.ID)
 
-	return DockerResult{
-		ContainerId: resp.ID,
-		Action:      "start",
-		Result:      "success",
+	netnsid := uuid.NewString()
+	exec.Command("sudo", "ip", "netns", "attach", netnsid, strconv.Itoa(cinfo.State.Pid)).Output()
+
+	return DockerResult{Netnsid: netnsid, Pid: cinfo.State.Pid, ContainerId: resp.ID, Action: "start", Result: "success"}
+}
+
+func (d *Docker) Stop(id string) DockerResult {
+	log.Printf("Attempting to stop container %v", id)
+	ctx := context.Background()
+	err := d.Client.ContainerStop(ctx, id, client.ContainerStopOptions{})
+	if err != nil {
+		log.Printf("Error stopping container %s: %v\n", id, err)
+		return DockerResult{Error: err}
 	}
+
+	err = d.Client.ContainerRemove(ctx, id, client.ContainerRemoveOptions{
+		RemoveVolumes: true,
+		RemoveLinks:   false,
+		Force:         false,
+	})
+	if err != nil {
+		log.Printf("Error removing container %s: %v\n", id, err)
+		return DockerResult{Error: err}
+	}
+
+	return DockerResult{Action: "stop", Result: "success", Error: nil}
 }

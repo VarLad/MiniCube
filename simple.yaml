@@ -13,8 +13,8 @@ hosts:
                     - "fe80::1/64"
                 dns: 1.1.1.1
                 gateway: 192.168.0.255
-                dst_node: sw1
-                dst_iface: 1
+                dst_node: h2
+                dst_iface: eth0
                 vlans:
                     eth0.100:
                         description: "Example VLAN 100"
@@ -37,8 +37,8 @@ hosts:
                 addresses:
                     - "192.168.0.2/24"
                     - "fe80::2/64"
-                dst_node: sw2
-                dst_iface: 2
+                dst_node: h1
+                dst_iface: eth0
                 vlans:
                     eth0.100:
                         description: "Example VLAN 100"
