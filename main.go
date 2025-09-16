@@ -17,6 +17,7 @@ import (
 	"OrchestratorGo/cube/worker"
 
 	"github.com/moby/moby/client"
+	"slices"
 	// "github.com/vishvananda/netlink"
 	// "github.com/vishvananda/netns"
 )
@@ -92,10 +93,46 @@ func createContainersFromConfig(conf *parser.NetworkConfig) ([]*task.Docker, []*
 	return ds, results, hostnames
 }
 
+type HostIfacePair struct {
+	Host  string
+	Iface string
+}
+
 func createConnectionsFromNetworkConfig(conf *parser.NetworkConfig, createResults []*task.Docker, dockerResults []*task.DockerResult, hostnames []string) {
+	fmt.Println("Meow")
+	usedhostpair := []HostIfacePair{}
+	useddestpair := []HostIfacePair{}
 	for i := range hostnames {
+		for interfacename, iface := range conf.Hosts[hostnames[i]].Interfaces {
+			reversepair := conf.Hosts[iface.DstNode].Interfaces[iface.DstIface]
+			if slices.Contains(usedhostpair, HostIfacePair{iface.DstNode, iface.DstIface}) && slices.Contains(useddestpair, HostIfacePair{hostnames[i], interfacename}) {
+				if reversepair.DstNode == string(hostnames[i]) && reversepair.DstIface == string(interfacename) {
+					useddestpair = append(useddestpair, HostIfacePair{iface.DstNode, iface.DstIface})
+					usedhostpair = append(usedhostpair, HostIfacePair{hostnames[i], string(interfacename)})
+					continue
+				} else {
+					panic("Mismatch with destination")
+				}
+			}
+			if slices.Contains(usedhostpair, HostIfacePair{hostnames[i], string(interfacename)}) {
+				panic("The same interface name or host name has been likely declared more than once.")
+			} else {
+				if slices.Contains(useddestpair, HostIfacePair{iface.DstNode, iface.DstIface}) {
+					panic("This interface is already in use.")
+				} else {
+					if reversepair.DstNode == string(hostnames[i]) && reversepair.DstIface == string(interfacename) {
+						useddestpair = append(useddestpair, HostIfacePair{iface.DstNode, iface.DstIface})
+						usedhostpair = append(usedhostpair, HostIfacePair{hostnames[i], string(interfacename)})
+						// create_the_connections
+					} else {
+						panic("Mismatch with the destination.")
+					}
+				}
+			}
+			fmt.Println(interfacename)
+		}
 		fmt.Println(hostnames[i])
-		fmt.Println(conf.Hosts[hostnames[i]])
+		fmt.Println(conf.Hosts[hostnames[i]].Interfaces)
 		fmt.Println(createResults[i].Config.Name)
 		fmt.Println(dockerResults[i].Netnsid)
 	}
