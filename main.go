@@ -56,10 +56,9 @@ func createContainer() (*task.Docker, *task.DockerResult) {
 	return &d, &result
 }
 
-func createContainersFromConfig(conf *parser.NetworkConfig) ([]*task.Docker, []*task.DockerResult, []string) {
+func createContainersFromConfig(conf *parser.NetworkConfig) ([]*task.Docker, map[string]*task.DockerResult) {
 	ds := []*task.Docker{}
-	results := []*task.DockerResult{}
-	hostnames := []string{}
+	results := make(map[string]*task.DockerResult)
 
 	for hostname, host := range conf.Hosts {
 		if host.Type == "docker" {
@@ -81,16 +80,15 @@ func createContainersFromConfig(conf *parser.NetworkConfig) ([]*task.Docker, []*
 			result := d.Run([]string{"sleep", "infinity"})
 			if result.Error != nil {
 				fmt.Printf("%v\n", result.Error)
-				return nil, nil, nil
+				return nil, nil
 			}
 			fmt.Printf("Container %s is running with config %v\n", result.ContainerId, c)
 			ds = append(ds, &d)
-			results = append(results, &result)
-			hostnames = append(hostnames, d.Config.Name)
+			results[hostname] = &result
 		}
 	}
 
-	return ds, results, hostnames
+	return ds, results
 }
 
 type HostIfacePair struct {
@@ -98,32 +96,56 @@ type HostIfacePair struct {
 	Iface string
 }
 
-func createConnectionsFromNetworkConfig(conf *parser.NetworkConfig, createResults []*task.Docker, dockerResults []*task.DockerResult, hostnames []string) {
+func create_connection(hostname1 string, hostname2 string, ifacename1 string, ifacename2 string, netnsid1 string, netnsid2 string, iplist1 []string, iplist2 []string) {
+	fmt.Println(hostname1, hostname2, ifacename1, ifacename2, netnsid1, netnsid2, iplist1, iplist2)
+	exec.Command("sudo", "ip", "link", "add", hostname1, "type", "veth", "peer", "name", hostname2).Run()
+	exec.Command("sudo", "ip", "link", "set", hostname1, "netns", netnsid1).Run()
+	exec.Command("sudo", "ip", "link", "set", hostname2, "netns", netnsid2).Run()
+	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", "lo", "up").Run()
+	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", hostname1, "up").Run()
+	for _, ipaddr := range iplist1 {
+		exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "addr", "add", ipaddr, "dev", hostname1).Run()
+	}
+	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", "lo", "up").Run()
+	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", hostname2, "up").Run()
+	for _, ipaddr := range iplist2 {
+		exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "addr", "add", ipaddr, "dev", hostname2).Run()
+	}
+	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", hostname1, "down").Run()
+	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", hostname1, "name", ifacename1).Run()
+	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", ifacename1, "up").Run()
+	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", hostname2, "down").Run()
+	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", hostname2, "name", ifacename2).Run()
+	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", ifacename2, "up").Run()
+}
+
+func createConnectionsFromNetworkConfig(conf *parser.NetworkConfig, dockerTasks []*task.Docker, createResults map[string]*task.DockerResult) {
 	fmt.Println("Meow")
 	usedhostpair := []HostIfacePair{}
 	useddestpair := []HostIfacePair{}
-	for i := range hostnames {
-		for interfacename, iface := range conf.Hosts[hostnames[i]].Interfaces {
+	for _, dockerTask := range dockerTasks {
+		hostname := dockerTask.Config.Name
+		for interfacename, iface := range conf.Hosts[hostname].Interfaces {
 			reversepair := conf.Hosts[iface.DstNode].Interfaces[iface.DstIface]
-			if slices.Contains(usedhostpair, HostIfacePair{iface.DstNode, iface.DstIface}) && slices.Contains(useddestpair, HostIfacePair{hostnames[i], interfacename}) {
-				if reversepair.DstNode == string(hostnames[i]) && reversepair.DstIface == string(interfacename) {
+			if slices.Contains(usedhostpair, HostIfacePair{iface.DstNode, iface.DstIface}) && slices.Contains(useddestpair, HostIfacePair{hostname, interfacename}) {
+				if reversepair.DstNode == string(hostname) && reversepair.DstIface == interfacename {
 					useddestpair = append(useddestpair, HostIfacePair{iface.DstNode, iface.DstIface})
-					usedhostpair = append(usedhostpair, HostIfacePair{hostnames[i], string(interfacename)})
+					usedhostpair = append(usedhostpair, HostIfacePair{hostname, interfacename})
 					continue
 				} else {
 					panic("Mismatch with destination")
 				}
 			}
-			if slices.Contains(usedhostpair, HostIfacePair{hostnames[i], string(interfacename)}) {
+			if slices.Contains(usedhostpair, HostIfacePair{hostname, string(interfacename)}) {
 				panic("The same interface name or host name has been likely declared more than once.")
 			} else {
 				if slices.Contains(useddestpair, HostIfacePair{iface.DstNode, iface.DstIface}) {
 					panic("This interface is already in use.")
 				} else {
-					if reversepair.DstNode == string(hostnames[i]) && reversepair.DstIface == string(interfacename) {
+					if reversepair.DstNode == hostname && reversepair.DstIface == interfacename {
 						useddestpair = append(useddestpair, HostIfacePair{iface.DstNode, iface.DstIface})
-						usedhostpair = append(usedhostpair, HostIfacePair{hostnames[i], string(interfacename)})
-						// create_the_connections
+						usedhostpair = append(usedhostpair, HostIfacePair{hostname, interfacename})
+						create_connection(hostname, iface.DstNode, interfacename, iface.DstIface, createResults[hostname].Netnsid, createResults[iface.DstNode].Netnsid, iface.Addresses, reversepair.Addresses)
 					} else {
 						panic("Mismatch with the destination.")
 					}
@@ -131,10 +153,6 @@ func createConnectionsFromNetworkConfig(conf *parser.NetworkConfig, createResult
 			}
 			fmt.Println(interfacename)
 		}
-		fmt.Println(hostnames[i])
-		fmt.Println(conf.Hosts[hostnames[i]].Interfaces)
-		fmt.Println(createResults[i].Config.Name)
-		fmt.Println(dockerResults[i].Netnsid)
 	}
 }
 
@@ -222,18 +240,16 @@ func main() {
 		_ = stopContainer(dockerTask, createResult.ContainerId)
 	*/
 
-	dockerTasks, createResults, hostnames := createContainersFromConfig(config)
+	dockerTasks, createResults := createContainersFromConfig(config)
 	// connections := createConnectionsFromNetwork(config)
-	createConnectionsFromNetworkConfig(config, dockerTasks, createResults, hostnames)
+	createConnectionsFromNetworkConfig(config, dockerTasks, createResults)
 
 	var i string
 
 	fmt.Scanln(&i)
 
-	for i := range dockerTasks {
-		createResult := createResults[i]
-		dockerTask := dockerTasks[i]
-
+	for _, dockerTask := range dockerTasks {
+		createResult := createResults[dockerTask.Config.Name]
 		if createResult.Error != nil {
 			fmt.Printf("%v", createResult.Error)
 			os.Exit(1)

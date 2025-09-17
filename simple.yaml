@@ -22,6 +22,13 @@ hosts:
                             - "10.0.0.1/24"
                             - "2001:db8:1::1/64"
                         id: 100
+            eth1:
+                description: "Example connection to sw1"
+                speed: 1000
+                addresses:
+                    - "192.168.1.1/24"
+                dst_node: h3
+                dst_iface: eth0
         cmds: # Additional commands to run when starting host
             - cmd: "...."
             - cmd: "...."
@@ -46,6 +53,36 @@ hosts:
                             - "10.0.0.2/24"
                             - "2001:db8:1::2/64"
                         id: 100
+            eth1:
+                description: "Example connection to sw1"
+                speed: 1000
+                addresses:
+                    - "192.168.2.1/24"
+                    - "fe80::4/64"
+                dst_node: h3
+                dst_iface: eth1
+    h3:
+        type: docker
+        description: "Example host 3"
+        groups:
+            - hosts
+        interfaces:
+            eth0:
+                description: "Example connection to sw1"
+                speed: 1000
+                addresses:
+                    - "192.168.1.2/24"
+                    - "fe80::5/64"
+                dst_node: h1
+                dst_iface: eth1
+            eth1:
+                description: "Example connection to sw1"
+                speed: 1000
+                addresses:
+                    - "192.168.2.2/24"
+                    - "fe80::6/64"
+                dst_node: h2
+                dst_iface: eth1
 
 connections:
     c1:
