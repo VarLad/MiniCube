@@ -1,4 +1,4 @@
-#!/home/varlad/.local/bin/nu
+#!/usr/bin/nu
 
 let pids = podman ps --ns --format=json | from json | get Pid
 
