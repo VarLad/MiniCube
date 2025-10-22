@@ -119,6 +119,10 @@ func create_connection(hostname1 string, hostname2 string, ifacename1 string, if
 	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", ifacename2, "up").Run()
 }
 
+func create_connection(hostname1 string, hostname2 string, ifacename1 string if) {
+	
+}
+
 func createHostConnectionsFromNetworkConfig(conf *parser.NetworkConfig, dockerTasks []*task.Docker, createResults map[string]*task.DockerResult) {
 	fmt.Println("Meow")
 	usedhostpair := []HostIfacePair{}
