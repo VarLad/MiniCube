@@ -75,28 +75,28 @@ vlans:
 
 switches:
     sw1:
-        type: ovs
+        type: ovs-docker
         description: "Example basic Open vSwitch"
         interfaces:
             eth0:
                 description: "Example connection to sw1"
                 speed: 1000
                 dst_node: sw2
-                dst_iface: eth10
+                dst_iface: eth0
             eth1:
                 description: "Example connection to sw1"
                 speed: 1000
                 dst_node: h1
                 dst_iface: eth1
     sw2:
-        type: ovs
+        type: ovs-docker
         description: "Example basic Open vSwitch"
         interfaces:
             eth0:
                 description: "Example connection to sw1"
                 speed: 1000
                 dst_node: sw1
-                dst_iface: eth10
+                dst_iface: eth0
             eth1:
                 description: "Example connection to sw1"
                 speed: 1000
