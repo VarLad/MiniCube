@@ -1,0 +1,122 @@
+#!/usr/bin/nu
+
+let pids = podman ps --ns --format=json | from json | get Pid
+
+let pid1 = $pids | get 0
+
+let pid2 = $pids | get 1
+
+let pid3 = $pids | get 2
+
+print ($pids)
+
+let ns1 = "ns1"
+
+let ns2 = "ns2"
+
+let ns3 = "ns3"
+
+let host1 = "host1"
+
+let host2 = "host2"
+
+let host3 = "host3"
+
+sudo ip netns attach $ns1 $pid1
+
+sudo ip netns attach $ns2 $pid2
+
+sudo ip netns attach $ns3 $pid3
+
+# h1 (eth0) <--> h2 (eth0) 
+
+sudo ip link add $host1 type veth peer name $host2
+
+sudo ip link set $host2 $ns1
+
+sudo ip link set $host2 netns $ns2
+
+sudo ip link set $host1 netns $ns1
+
+sudo ip netns exec $ns1 ip link set lo up
+
+sudo ip netns exec $ns1 ip link set $host1 up
+
+sudo ip netns exec $ns1  ip addr add 10.0.0.1/24 dev $host1
+
+sudo ip netns exec $ns2 ip link set lo up
+
+sudo ip netns exec $ns2 ip link set $host2 up
+
+sudo ip netns exec $ns2 ip addr add 10.0.0.2/24 dev $host2
+
+sudo ip netns exec $ns1 ip link set $host1 down
+
+sudo ip netns exec $ns1 ip link set $host1 name eth0
+
+sudo ip netns exec $ns1 ip link set eth0 up
+
+sudo ip netns exec $ns2 ip link set $host2 down
+
+sudo ip netns exec $ns2 ip link set $host2 name eth0
+
+sudo ip netns exec $ns2 ip link set eth0 up
+
+# h2 (eth1) <--> h3 (eth0)
+
+sudo ip link add $host2 type veth peer name $host3
+
+sudo ip link set $host2 netns $ns2
+
+sudo ip link set $host3 netns $ns3
+
+sudo ip netns exec $ns2 ip link set lo up
+
+sudo ip netns exec $ns2 ip link set $host2 up
+
+sudo ip netns exec $ns2 ip addr add 10.0.1.1/24 dev $host2
+
+sudo ip netns exec $ns3 ip link set lo up
+
+sudo ip netns exec $ns3 ip link set $host3 up
+
+sudo ip netns exec $ns3 ip addr add 10.0.1.2/24 dev $host3
+
+sudo ip netns exec $ns2 ip link set $host2 down
+
+sudo ip netns exec $ns2 ip link set $host2 name eth1
+
+sudo ip netns exec $ns2 ip link set eth1 up
+
+sudo ip netns exec $ns3 ip link set $host3 down
+
+sudo ip netns exec $ns3 ip link set $host3 name eth0
+
+sudo ip netns exec $ns3 ip link set eth0 up
+
+sudo ip netns exec $ns2 ovs-vsctl add-br br0
+
+sudo ip netns exec $ns2 ovs-vsctl add-port br0 eth0
+
+sudo ip netns exec $ns2 ovs-vsctl add-port br0 eth1
+
+read()
+
+sudo kill $pid1
+
+sudo kill $pid2
+
+sudo kill $pid3
+
+sudo ip netns del $ns1
+
+sudo ip netns del $ns2
+
+sudo ip netns del $ns3
+
+sudo ip link del $host1
+
+sudo ip link del $host2
+
+sudo ip link del $host3
+
