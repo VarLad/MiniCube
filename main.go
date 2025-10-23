@@ -17,6 +17,7 @@ import (
 	"OrchestratorGo/cube/worker"
 
 	"github.com/moby/moby/client"
+	"log"
 	"slices"
 	// "github.com/vishvananda/netlink"
 	// "github.com/vishvananda/netns"
@@ -61,11 +62,18 @@ func createContainersFromConfig(conf *parser.NetworkConfig) ([]*task.Docker, map
 	results := make(map[string]*task.DockerResult)
 
 	for hostname, host := range conf.Hosts {
-		if host.Type == "docker" {
+		if host.Type == "docker" || host.Type == "ovs-docker" {
+
+			image := "alpine:latest"
+
+			switch host.Type {
+			case "ovs-docker":
+				image = "debian-ovs"
+			}
 
 			c := task.Config{
 				Name:  string(hostname),
-				Image: "alpine:latest",
+				Image: image,
 				Env: []string{
 					"HELLO=cube",
 				},
@@ -96,35 +104,63 @@ type HostIfacePair struct {
 	Iface string
 }
 
-func create_connection(hostname1 string, hostname2 string, ifacename1 string, ifacename2 string, netnsid1 string, netnsid2 string, iplist1 []string, iplist2 []string) {
+/*
+func container_exec(containertype string, name string, super string, extra []string) {
+
+}
+*/
+
+func create_connection(hosttype1 string, hosttype2 string, hostname1 string, hostname2 string, ifacename1 string, ifacename2 string, netnsid1 string, netnsid2 string, iplist1 []string, iplist2 []string) {
+	fmt.Println()
+	fmt.Println("Connection Creation")
 	fmt.Println(hostname1, hostname2, ifacename1, ifacename2, netnsid1, netnsid2, iplist1, iplist2)
-	exec.Command("sudo", "ip", "link", "add", hostname1, "type", "veth", "peer", "name", hostname2).Run()
-	exec.Command("sudo", "ip", "link", "set", hostname1, "netns", netnsid1).Run()
-	exec.Command("sudo", "ip", "link", "set", hostname2, "netns", netnsid2).Run()
+	fmt.Println()
+	veth1 := "veth1"
+	veth2 := "veth2"
+	// exec.Command("sudo", "docker", "exec", hostname1, "ovs-ctl", "start")
+	c := exec.Command("sudo", "ip", "link", "add", veth1, "type", "veth", "peer", "name", veth2)
+	out, err := c.Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("The date is %s\n", out)
+	fmt.Println()
+	exec.Command("sudo", "ip", "link", "set", veth1, "netns", netnsid1).Run()
+	if hosttype1 == "ovs-docker" {
+		exec.Command("sudo", "docker", "exec", hostname1, "ovs-vsctl", "add-port", "br0", veth1)
+	}
 	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", "lo", "up").Run()
-	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", hostname1, "up").Run()
+	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", veth1, "up").Run()
+	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", veth1, "down").Run()
+	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", veth1, "name", ifacename1).Run()
+	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", ifacename1, "up").Run()
 	for _, ipaddr := range iplist1 {
-		exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "addr", "add", ipaddr, "dev", hostname1).Run()
+		exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "addr", "add", ipaddr, "dev", ifacename1).Run()
+	}
+
+	exec.Command("sudo", "ip", "link", "set", veth2, "netns", netnsid2).Run()
+	if hosttype2 == "ovs-docker" {
+		exec.Command("sudo", "docker", "exec", hostname2, "ovs-vsctl", "add-port", "br0", veth2)
 	}
 	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", "lo", "up").Run()
-	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", hostname2, "up").Run()
-	for _, ipaddr := range iplist2 {
-		exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "addr", "add", ipaddr, "dev", hostname2).Run()
-	}
-	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", hostname1, "down").Run()
-	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", hostname1, "name", ifacename1).Run()
-	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", ifacename1, "up").Run()
-	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", hostname2, "down").Run()
-	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", hostname2, "name", ifacename2).Run()
+	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", veth2, "up").Run()
+	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", veth2, "down").Run()
+	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", veth2, "name", ifacename2).Run()
 	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", ifacename2, "up").Run()
+	for _, ipaddr := range iplist2 {
+		exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "addr", "add", ipaddr, "dev", ifacename2).Run()
+	}
+
 }
 
+/*
 func create_connection(hostname1 string, hostname2 string, ifacename1 string if) {
-	
-}
 
+}
+*/
 func createHostConnectionsFromNetworkConfig(conf *parser.NetworkConfig, dockerTasks []*task.Docker, createResults map[string]*task.DockerResult) {
 	fmt.Println("Meow")
+	fmt.Println(conf.Hosts["h3"].Interfaces)
 	usedhostpair := []HostIfacePair{}
 	useddestpair := []HostIfacePair{}
 	for _, dockerTask := range dockerTasks {
@@ -149,7 +185,7 @@ func createHostConnectionsFromNetworkConfig(conf *parser.NetworkConfig, dockerTa
 					if reversepair.DstNode == hostname && reversepair.DstIface == interfacename {
 						useddestpair = append(useddestpair, HostIfacePair{iface.DstNode, iface.DstIface})
 						usedhostpair = append(usedhostpair, HostIfacePair{hostname, interfacename})
-						create_connection(hostname, iface.DstNode, interfacename, iface.DstIface, createResults[hostname].Netnsid, createResults[iface.DstNode].Netnsid, iface.Addresses, reversepair.Addresses)
+						create_connection(conf.Hosts[hostname].Type, conf.Hosts[iface.DstNode].Type, hostname, iface.DstNode, interfacename, iface.DstIface, createResults[hostname].Netnsid, createResults[iface.DstNode].Netnsid, iface.Addresses, reversepair.Addresses)
 					} else {
 						panic("Mismatch with the destination.")
 					}

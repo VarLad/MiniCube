@@ -61,6 +61,11 @@ hosts:
                     - "fe80::4/64"
                 dst_node: h3
                 dst_iface: eth1
+            eth2:
+                description: "Example connection to sw1"
+                speed: 1000
+                dst_node: h3
+                dst_iface: eth2
     h3:
         type: docker
         description: "Example host 3"
@@ -83,6 +88,11 @@ hosts:
                     - "fe80::6/64"
                 dst_node: h2
                 dst_iface: eth1
+            eth2:
+                description: "Example connection to sw1"
+                speed: 1000
+                dst_node: h2
+                dst_iface: eth2
 
 connections:
     c1:
