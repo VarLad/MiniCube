@@ -1,6 +1,13 @@
-let ovspid = (docker inspect -f '{{.State.Pid}}' ovs-test)
-let pid1 = (docker inspect -f '{{.State.Pid}}' test1)
-let pid2 = (docker inspect -f '{{.State.Pid}}' test2)
+let ovspid = docker inspect -f '{{.State.Pid}}' ovs-test
+
+let pid1 = docker inspect -f '{{State.Pid}}' test1
+
+let pid2 = docker inspect -f '{{State.Pid}}' test2
+
+print ("Start")
+
+print ("$pid1 $pid2")
+
 let nsovs = "nsovs"
 
 # setup bridge br0
@@ -9,7 +16,9 @@ let hostovs = "hostovs"
 
 sudo ip netns attach $nsovs $ovspid
 
-# sudo docker exec ovs-test ovs-ctl start
+sudo docker exec ovs-test ovs-ctl start
+
+sudo docker exec ovs-test ovs-vsctl del-br br0
 
 sudo docker exec ovs-test ovs-vsctl add-br br0
 
@@ -75,7 +84,7 @@ sudo ip netns exec $ns2 ip link set eth0 up
 
 sudo ip netns exec $nsovs ip link set ($hostovs + "2") up
 
-input
+read()
 
 sudo kill $pid1
 

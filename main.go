@@ -66,9 +66,12 @@ func createContainersFromConfig(conf *parser.NetworkConfig) ([]*task.Docker, map
 
 			image := "alpine:latest"
 
+			cmds := []string{"sleep", "infinity"}
+
 			switch host.Type {
 			case "ovs-docker":
 				image = "debian-ovs"
+				cmds = []string{"sh", "-c", "ovs-ctl start; ovs-vsctl add-br br0; sleep infinity"}
 			}
 
 			c := task.Config{
@@ -85,7 +88,7 @@ func createContainersFromConfig(conf *parser.NetworkConfig) ([]*task.Docker, map
 				Config: c,
 			}
 
-			result := d.Run([]string{"sleep", "infinity"})
+			result := d.Run(cmds)
 			if result.Error != nil {
 				fmt.Printf("%v\n", result.Error)
 				return nil, nil
@@ -119,15 +122,22 @@ func create_connection(hosttype1 string, hosttype2 string, hostname1 string, hos
 	veth2 := "veth2"
 	// exec.Command("sudo", "docker", "exec", hostname1, "ovs-ctl", "start")
 	c := exec.Command("sudo", "ip", "link", "add", veth1, "type", "veth", "peer", "name", veth2)
-	out, err := c.Output()
+	_, err := c.Output()
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("The date is %s\n", out)
 	fmt.Println()
-	exec.Command("sudo", "ip", "link", "set", veth1, "netns", netnsid1).Run()
+	c = exec.Command("sudo", "ip", "link", "set", veth1, "netns", netnsid1)
+	_, err = c.Output()
+	if err != nil {
+		log.Fatal(err)
+	}
 	if hosttype1 == "ovs-docker" {
-		exec.Command("sudo", "docker", "exec", hostname1, "ovs-vsctl", "add-port", "br0", veth1)
+		c = exec.Command("sudo", "docker", "exec", hostname1, "ovs-vsctl", "add-port", "br0", ifacename1)
+		_, err = c.Output()
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", "lo", "up").Run()
 	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", veth1, "up").Run()
@@ -139,9 +149,6 @@ func create_connection(hosttype1 string, hosttype2 string, hostname1 string, hos
 	}
 
 	exec.Command("sudo", "ip", "link", "set", veth2, "netns", netnsid2).Run()
-	if hosttype2 == "ovs-docker" {
-		exec.Command("sudo", "docker", "exec", hostname2, "ovs-vsctl", "add-port", "br0", veth2)
-	}
 	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", "lo", "up").Run()
 	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", veth2, "up").Run()
 	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", veth2, "down").Run()
@@ -149,6 +156,9 @@ func create_connection(hosttype1 string, hosttype2 string, hostname1 string, hos
 	exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "link", "set", ifacename2, "up").Run()
 	for _, ipaddr := range iplist2 {
 		exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "addr", "add", ipaddr, "dev", ifacename2).Run()
+	}
+	if hosttype2 == "ovs-docker" {
+		exec.Command("sudo", "docker", "exec", hostname2, "ovs-vsctl", "add-port", "br0", ifacename2).Run()
 	}
 
 }
@@ -159,8 +169,8 @@ func create_connection(hostname1 string, hostname2 string, ifacename1 string if)
 }
 */
 func createHostConnectionsFromNetworkConfig(conf *parser.NetworkConfig, dockerTasks []*task.Docker, createResults map[string]*task.DockerResult) {
-	fmt.Println("Meow")
-	fmt.Println(conf.Hosts["h3"].Interfaces)
+	// fmt.Println("Meow")
+	// fmt.Println(conf.Hosts["h3"].Interfaces)
 	usedhostpair := []HostIfacePair{}
 	useddestpair := []HostIfacePair{}
 	for _, dockerTask := range dockerTasks {
@@ -187,6 +197,10 @@ func createHostConnectionsFromNetworkConfig(conf *parser.NetworkConfig, dockerTa
 						usedhostpair = append(usedhostpair, HostIfacePair{hostname, interfacename})
 						create_connection(conf.Hosts[hostname].Type, conf.Hosts[iface.DstNode].Type, hostname, iface.DstNode, interfacename, iface.DstIface, createResults[hostname].Netnsid, createResults[iface.DstNode].Netnsid, iface.Addresses, reversepair.Addresses)
 					} else {
+						fmt.Println(reversepair.DstNode)
+						fmt.Println(hostname)
+						fmt.Println(reversepair.DstIface)
+						fmt.Println(interfacename)
 						panic("Mismatch with the destination.")
 					}
 				}
@@ -210,7 +224,7 @@ func stopContainer(d *task.Docker, id string) *task.DockerResult {
 
 func main() {
 	fmt.Println("==== Parsing YAML file ====")
-	config, _ := parser.ParseYAMLFile("simple.yaml")
+	config, _ := parser.ParseYAMLFile("simple_ovs.yaml")
 	parser.ConnectNetworkconfig(config)
 
 	t := task.Task{

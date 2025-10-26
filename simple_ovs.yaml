@@ -44,8 +44,8 @@ hosts:
                 addresses:
                     - "192.168.0.2/24"
                     - "fe80::2/64"
-                dst_node: sw2
-                dst_iface: eth1
+                dst_node: sw1
+                dst_iface: eth2
                 vlans:
                     eth0.100:
                         description: "Example VLAN 100"
@@ -67,6 +67,35 @@ hosts:
                     - "fe80::5/64"
                 dst_node: h1
                 dst_iface: eth1
+    sw1:
+        type: ovs-docker
+        description: "Example basic Open vSwitch"
+        interfaces:
+            eth0:
+                description: "Example connection to sw2"
+                speed: 1000
+                dst_node: sw2
+                dst_iface: eth0
+            eth1:
+                description: "Example connection to h1 (eth0)"
+                speed: 1000
+                dst_node: h1
+                dst_iface: eth0
+            eth2:
+                description: "Example connection to h2 (eth0)"
+                speed: 1000
+                dst_node: h2
+                dst_iface: eth0
+
+    sw2:
+        type: ovs-docker
+        description: "Example basic Open vSwitch"
+        interfaces:
+            eth0:
+                description: "Example connection to sw1"
+                speed: 1000
+                dst_node: sw1
+                dst_iface: eth0
 
 vlans:
     test:
