@@ -171,12 +171,16 @@ func create_connection(hosttype1 string, hosttype2 string, hostname1 string, hos
 	*/
 	if hosttype1 == "docker" || hosttype1 == "frr-docker" {
 		for _, i := range routelis1 {
-			exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "route", "add", i.To, "via", i.Via)
+			fmt.Println("New Meow")
+			fmt.Println(i)
+			exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "route", "add", i.To, "via", i.Via).Run()
 		}
 	}
 	if hosttype2 == "docker" || hosttype2 == "frr-docker" {
 		for _, i := range routelist2 {
-			exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "route", "add", i.To, "via", i.Via)
+			fmt.Println("New Meow 2")
+			fmt.Println(i)
+			exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "route", "add", i.To, "via", i.Via).Run()
 		}
 	}
 }
