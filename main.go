@@ -136,15 +136,15 @@ func create_connection(hosttype1 string, hosttype2 string, hostname1 string, hos
 	if err != nil {
 		log.Fatal(err)
 	}
-	/*
-		if hosttype1 == "ovs-docker" {
-			c = exec.Command("sudo", "docker", "exec", hostname1, "ovs-vsctl", "add-port", "br0", ifacename1)
-			_, err = c.Output()
-			if err != nil {
-				log.Fatal(err)
-			}
+
+	if hosttype1 == "ovs-docker" {
+		c = exec.Command("sudo", "docker", "exec", hostname1, "ovs-vsctl", "add-port", "br0", ifacename1)
+		_, err = c.Output()
+		if err != nil {
+			log.Fatal(err)
 		}
-	*/
+	}
+
 	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", "lo", "up").Run()
 	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", veth1, "up").Run()
 	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", veth1, "down").Run()
@@ -163,12 +163,10 @@ func create_connection(hosttype1 string, hosttype2 string, hostname1 string, hos
 	for _, ipaddr := range iplist2 {
 		exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "addr", "add", ipaddr, "dev", ifacename2).Run()
 	}
-	/*
-			if hosttype2 == "ovs-docker" {
-				exec.Command("sudo", "docker", "exec", hostname2, "ovs-vsctl", "add-port", "br0", ifacename2).Run()
-			}
-		}
-	*/
+	if hosttype2 == "ovs-docker" {
+		exec.Command("sudo", "docker", "exec", hostname2, "ovs-vsctl", "add-port", "br0", ifacename2).Run()
+	}
+
 	if hosttype1 == "docker" || hosttype1 == "frr-docker" {
 		for _, i := range routelis1 {
 			fmt.Println("New Meow")
