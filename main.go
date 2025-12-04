@@ -68,18 +68,21 @@ func createContainersFromConfig(conf *parser.NetworkConfig) ([]*task.Docker, map
 
 			cmds := []string{"sleep", "infinity"}
 
+			env := []string{"HELLO=cube"}
+			
 			switch host.Type {
 			case "ovs-docker":
 				image = "debian-ovs"
 				cmds = []string{"sh", "-c", "ovs-ctl start; ovs-vsctl add-br br0; sleep infinity"}
+			case "frr-docker":
+				image = "frrouting/frr:latest"
+				env = []string{"FRR_DAEMONS=\"zebra bgpd ospfd\""}
 			}
 
 			c := task.Config{
 				Name:  string(hostname),
 				Image: image,
-				Env: []string{
-					"HELLO=cube",
-				},
+				Env: env
 			}
 
 			dc, _ := client.NewClientWithOpts(client.FromEnv)
@@ -113,7 +116,7 @@ func container_exec(containertype string, name string, super string, extra []str
 }
 */
 
-func create_connection(hosttype1 string, hosttype2 string, hostname1 string, hostname2 string, ifacename1 string, ifacename2 string, netnsid1 string, netnsid2 string, iplist1 []string, iplist2 []string) {
+func create_connection(hosttype1 string, hosttype2 string, hostname1 string, hostname2 string, ifacename1 string, ifacename2 string, netnsid1 string, netnsid2 string, iplist1 []string, iplist2 []string, routelist1 []string, routelist2 []string) {
 	fmt.Println()
 	fmt.Println("Connection Creation")
 	fmt.Println(hostname1, hostname2, ifacename1, ifacename2, netnsid1, netnsid2, iplist1, iplist2)
@@ -224,7 +227,7 @@ func stopContainer(d *task.Docker, id string) *task.DockerResult {
 
 func main() {
 	fmt.Println("==== Parsing YAML file ====")
-	config, _ := parser.ParseYAMLFile("simple_ovs.yaml")
+	config, _ := parser.ParseYAMLFile("simple_frr.yaml")
 	parser.ConnectNetworkconfig(config)
 
 	t := task.Task{
