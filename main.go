@@ -62,7 +62,7 @@ func createContainersFromConfig(conf *parser.NetworkConfig) ([]*task.Docker, map
 	results := make(map[string]*task.DockerResult)
 
 	for hostname, host := range conf.Hosts {
-		if host.Type == "docker" || host.Type == "frr-docker" {
+		if host.Type == "docker" || host.Type == "frr-docker" || host.Type == "ovs-docker" {
 
 			image := "alpine:latest"
 
@@ -247,7 +247,7 @@ func stopContainer(d *task.Docker, id string) *task.DockerResult {
 
 func main() {
 	fmt.Println("==== Parsing YAML file ====")
-	config, _ := parser.ParseYAMLFile("simple_frr.yaml")
+	config, _ := parser.ParseYAMLFile("simple_ovs.yaml")
 	parser.ConnectNetworkconfig(config)
 
 	t := task.Task{

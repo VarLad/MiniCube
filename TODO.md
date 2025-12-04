@@ -3,10 +3,10 @@
 
 - [ ] Shift to the API in `nsenter/nsenter.go` to run commands inside containers
 
-- [ ] FRR
+- [x] FRR
   - [x] Test out a script to run frr locally
   - [x] Get FRR in the YAML
   - [x] Write the parser code (required?)
   - [x] Figure out how to programatically create the FRR container using the Go API
-  - [ ] Write out the connection logic
-  - [ ] Test the YAML
+  - [x] Write out the connection logic
+  - [x] Test the YAML
