@@ -62,14 +62,14 @@ func createContainersFromConfig(conf *parser.NetworkConfig) ([]*task.Docker, map
 	results := make(map[string]*task.DockerResult)
 
 	for hostname, host := range conf.Hosts {
-		if host.Type == "docker" || host.Type == "ovs-docker" {
+		if host.Type == "docker" || host.Type == "frr-docker" {
 
 			image := "alpine:latest"
 
 			cmds := []string{"sleep", "infinity"}
 
 			env := []string{"HELLO=cube"}
-			
+
 			switch host.Type {
 			case "ovs-docker":
 				image = "debian-ovs"
@@ -82,7 +82,7 @@ func createContainersFromConfig(conf *parser.NetworkConfig) ([]*task.Docker, map
 			c := task.Config{
 				Name:  string(hostname),
 				Image: image,
-				Env: env
+				Env:   env,
 			}
 
 			dc, _ := client.NewClientWithOpts(client.FromEnv)
@@ -116,13 +116,14 @@ func container_exec(containertype string, name string, super string, extra []str
 }
 */
 
-func create_connection(hosttype1 string, hosttype2 string, hostname1 string, hostname2 string, ifacename1 string, ifacename2 string, netnsid1 string, netnsid2 string, iplist1 []string, iplist2 []string, routelist1 []string, routelist2 []string) {
+func create_connection(hosttype1 string, hosttype2 string, hostname1 string, hostname2 string, ifacename1 string, ifacename2 string, netnsid1 string, netnsid2 string, iplist1 []string, iplist2 []string, routelis1 map[string]parser.Route, routelist2 map[string]parser.Route) {
 	fmt.Println()
 	fmt.Println("Connection Creation")
 	fmt.Println(hostname1, hostname2, ifacename1, ifacename2, netnsid1, netnsid2, iplist1, iplist2)
 	fmt.Println()
 	veth1 := "veth1"
 	veth2 := "veth2"
+
 	// exec.Command("sudo", "docker", "exec", hostname1, "ovs-ctl", "start")
 	c := exec.Command("sudo", "ip", "link", "add", veth1, "type", "veth", "peer", "name", veth2)
 	_, err := c.Output()
@@ -135,13 +136,15 @@ func create_connection(hosttype1 string, hosttype2 string, hostname1 string, hos
 	if err != nil {
 		log.Fatal(err)
 	}
-	if hosttype1 == "ovs-docker" {
-		c = exec.Command("sudo", "docker", "exec", hostname1, "ovs-vsctl", "add-port", "br0", ifacename1)
-		_, err = c.Output()
-		if err != nil {
-			log.Fatal(err)
+	/*
+		if hosttype1 == "ovs-docker" {
+			c = exec.Command("sudo", "docker", "exec", hostname1, "ovs-vsctl", "add-port", "br0", ifacename1)
+			_, err = c.Output()
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
-	}
+	*/
 	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", "lo", "up").Run()
 	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", veth1, "up").Run()
 	exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "link", "set", veth1, "down").Run()
@@ -160,10 +163,22 @@ func create_connection(hosttype1 string, hosttype2 string, hostname1 string, hos
 	for _, ipaddr := range iplist2 {
 		exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "addr", "add", ipaddr, "dev", ifacename2).Run()
 	}
-	if hosttype2 == "ovs-docker" {
-		exec.Command("sudo", "docker", "exec", hostname2, "ovs-vsctl", "add-port", "br0", ifacename2).Run()
+	/*
+			if hosttype2 == "ovs-docker" {
+				exec.Command("sudo", "docker", "exec", hostname2, "ovs-vsctl", "add-port", "br0", ifacename2).Run()
+			}
+		}
+	*/
+	if hosttype1 == "docker" {
+		for _, i := range routelis1 {
+			exec.Command("sudo", "ip", "netns", "exec", netnsid1, "ip", "route", "add", i.To, "via", i.Via)
+		}
 	}
-
+	if hosttype2 == "docker" {
+		for _, i := range routelist2 {
+			exec.Command("sudo", "ip", "netns", "exec", netnsid2, "ip", "route", "add", i.To, "via", i.Via)
+		}
+	}
 }
 
 /*
@@ -174,6 +189,9 @@ func create_connection(hostname1 string, hostname2 string, ifacename1 string if)
 func createHostConnectionsFromNetworkConfig(conf *parser.NetworkConfig, dockerTasks []*task.Docker, createResults map[string]*task.DockerResult) {
 	// fmt.Println("Meow")
 	// fmt.Println(conf.Hosts["h3"].Interfaces)
+	fmt.Println(conf.Hosts["frr1"].Routes)
+	fmt.Println("Meow")
+	fmt.Println("----")
 	usedhostpair := []HostIfacePair{}
 	useddestpair := []HostIfacePair{}
 	for _, dockerTask := range dockerTasks {
@@ -198,7 +216,7 @@ func createHostConnectionsFromNetworkConfig(conf *parser.NetworkConfig, dockerTa
 					if reversepair.DstNode == hostname && reversepair.DstIface == interfacename {
 						useddestpair = append(useddestpair, HostIfacePair{iface.DstNode, iface.DstIface})
 						usedhostpair = append(usedhostpair, HostIfacePair{hostname, interfacename})
-						create_connection(conf.Hosts[hostname].Type, conf.Hosts[iface.DstNode].Type, hostname, iface.DstNode, interfacename, iface.DstIface, createResults[hostname].Netnsid, createResults[iface.DstNode].Netnsid, iface.Addresses, reversepair.Addresses)
+						create_connection(conf.Hosts[hostname].Type, conf.Hosts[iface.DstNode].Type, hostname, iface.DstNode, interfacename, iface.DstIface, createResults[hostname].Netnsid, createResults[iface.DstNode].Netnsid, iface.Addresses, reversepair.Addresses, conf.Hosts[hostname].Routes, conf.Hosts[iface.DstNode].Routes)
 					} else {
 						fmt.Println(reversepair.DstNode)
 						fmt.Println(hostname)

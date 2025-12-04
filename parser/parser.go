@@ -27,8 +27,8 @@ type Interface struct {
 }
 
 type Route struct {
-	to  string `yaml:"to,omitempty"`
-	via string `yaml:"to,omitempty"`
+	To  string `yaml:"to,omitempty"`
+	Via string `yaml:"via,omitempty"`
 }
 
 // Command represents a command to run
@@ -41,7 +41,7 @@ type Host struct {
 	Type        string               `yaml:"type"`
 	Description string               `yaml:"description"`
 	Groups      []string             `yaml:"groups,omitempty"`
-	Routers     map[string]Route     `yaml:"routes,omitempty"`
+	Routes      map[string]Route     `yaml:"routes,omitempty"`
 	Interfaces  map[string]Interface `yaml:"interfaces,omitempty"`
 	Commands    []Command            `yaml:"cmds,omitempty"`
 }
